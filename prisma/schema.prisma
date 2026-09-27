@@ -1,0 +1,180 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Category {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique
+  description String?
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Manufacturer {
+  id      Int     @id @default(autoincrement())
+  name    String
+  phone   String?
+  email   String?
+  address String?
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Product {
+  id           Int     @id @default(autoincrement())
+  name         String
+  strength     String?
+  description  String?
+  sellingPrice Decimal @db.Decimal(10, 2)
+  barcode      String? @unique
+
+  categoryId     Int
+  manufacturerId Int
+
+  category     Category     @relation(fields: [categoryId], references: [id])
+  manufacturer Manufacturer @relation(fields: [manufacturerId], references: [id])
+  batches      Batch[]
+  saleItems    SaleItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Supplier {
+  id      Int     @id @default(autoincrement())
+  name    String
+  phone   String?
+  email   String?
+  address String?
+
+  batches Batch[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Batch {
+  id          Int      @id @default(autoincrement())
+  batchNumber String
+  expiryDate  DateTime
+
+  productId  Int
+  supplierId Int
+
+  product  Product  @relation(fields: [productId], references: [id])
+  supplier Supplier @relation(fields: [supplierId], references: [id])
+
+  inventoryMoves InventoryMovement[]
+  allocations    SaleItemBatchAllocation[]
+
+  createdAt DateTime @default(now())
+
+  @@unique([productId, batchNumber])
+}
+
+model InventoryMovement {
+  id           Int          @id @default(autoincrement())
+  batchId      Int
+  employeeId   Int
+  movementType MovementType
+  quantity     Int
+  reason       String?
+  createdAt    DateTime     @default(now())
+
+  batch    Batch    @relation(fields: [batchId], references: [id])
+  employee Employee @relation(fields: [employeeId], references: [id])
+}
+
+model Employee {
+  id        Int          @id @default(autoincrement())
+  firstName String
+  lastName  String
+  email     String       @unique
+  password  String
+  role      EmployeeRole
+
+  inventoryMoves InventoryMovement[]
+  sales          Sale[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Sale {
+  id            Int           @id @default(autoincrement())
+  employeeId    Int
+  totalAmount   Decimal       @db.Decimal(10, 2)
+  paymentMethod PaymentMethod
+  status        SaleStatus
+  createdAt     DateTime      @default(now())
+
+  employee Employee   @relation(fields: [employeeId], references: [id])
+  items    SaleItem[]
+}
+
+model SaleItem {
+  id        Int     @id @default(autoincrement())
+  saleId    Int
+  productId Int
+  quantity  Int
+  unitPrice Decimal @db.Decimal(10, 2)
+  subtotal  Decimal @db.Decimal(10, 2)
+
+  sale        Sale                      @relation(fields: [saleId], references: [id])
+  product     Product                   @relation(fields: [productId], references: [id])
+  allocations SaleItemBatchAllocation[]
+}
+
+model SaleItemBatchAllocation {
+  id         Int @id @default(autoincrement())
+  saleItemId Int
+  batchId    Int
+  quantity   Int
+
+  saleItem SaleItem @relation(fields: [saleItemId], references: [id])
+  batch    Batch    @relation(fields: [batchId], references: [id])
+
+  @@unique([saleItemId, batchId])
+}
+
+enum MovementType {
+  STOCK_RECEIVED
+  SALE
+  DAMAGED
+  EXPIRED
+  ADJUSTMENT
+}
+
+enum EmployeeRole {
+  ADMIN
+  PHARMACIST
+  CASHIER
+  INVENTORY_MANAGER
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  TRANSFER
+}
+
+enum SaleStatus {
+  COMPLETED
+  CANCELLED
+}
