@@ -1,25 +1,66 @@
 import { prisma } from "@/lib/prisma";
-import type { CreateCategoryInput, UpdateCategoryInput } from "@/lib/validation";
+import { Prisma } from "@/generated/prisma/client";
+import { AppError } from "@/lib/errors";
+import type {
+  CreateCategoryInput,
+  UpdateCategoryInput,
+  PaginatedQueryInput,
+} from "@/lib/validation";
 
 /**
  * Service class for Category business logic and database interactions.
  */
 export class CategoryService {
   /**
-   * Retrieves all categories, ordered alphabetically by name.
-   * Includes the count of associated products.
+   * Retrieves a paginated list of categories, ordered alphabetically by name.
+   * Includes the count of associated products for each row.
+   *
+   * Uses offset pagination (skip/take) so the database only ever returns
+   * `limit` rows (max 100) regardless of how many categories exist —
+   * keeping the query O(limit) instead of O(total rows).
+   *
+   * The page of rows and the total count are fetched in one batched
+   * transaction so both come from the same database snapshot. Without that,
+   * a category inserted between the two queries would produce a totalItems
+   * that disagrees with the returned page.
    */
-  static async getAll() {
-    return prisma.category.findMany({
-      orderBy: {
-        name: "asc",
-      },
-      include: {
-        _count: {
-          select: { products: true },
+  static async getAll(query: PaginatedQueryInput) {
+    const { page, limit, search } = query;
+
+    // Typed explicitly: without it TypeScript widens `mode` to string
+    // and the query no longer type-checks against Prisma.CategoryWhereInput.
+    const where: Prisma.CategoryWhereInput = search
+      ? { name: { contains: search, mode: "insensitive" } }
+      : {};
+
+    const [data, totalItems] = await prisma.$transaction([
+      prisma.category.findMany({
+        where,
+        orderBy: { name: "asc" },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          _count: {
+            select: { products: true },
+          },
         },
+      }),
+      prisma.category.count({ where }),
+    ]);
+
+    const totalPages = Math.ceil(totalItems / limit);
+
+    return {
+      data,
+      pagination: {
+        page,
+        limit,
+        totalItems,
+        totalPages,
+        hasNextPage: page < totalPages,
+        hasPreviousPage: page > 1,
       },
-    });
+    };
   }
 
   /**
@@ -37,9 +78,7 @@ export class CategoryService {
     });
 
     if (!category) {
-      const error = new Error(`Category with ID ${id} not found`);
-      (error as any).code = "NOT_FOUND";
-      throw error;
+      throw new AppError("NOT_FOUND", `Category with ID ${id} not found`);
     }
 
     return category;
@@ -48,6 +87,11 @@ export class CategoryService {
   /**
    * Creates a new category.
    * Checks for duplicate category names (case-insensitive) before creation.
+   *
+   * This pre-check is only a friendly-message optimization: it loses the
+   * race if two identical names arrive concurrently. The database's unique
+   * constraint on `name` is the real guarantee — if it rejects the insert
+   * (Prisma P2002), toErrorResponse() maps that to 409.
    */
   static async create(input: CreateCategoryInput) {
     const existing = await prisma.category.findFirst({
@@ -60,9 +104,10 @@ export class CategoryService {
     });
 
     if (existing) {
-      const error = new Error(`Category with name "${input.name}" already exists`);
-      (error as any).code = "CONFLICT";
-      throw error;
+      throw new AppError(
+        "CONFLICT",
+        `Category with name "${input.name}" already exists`
+      );
     }
 
     return prisma.category.create({
@@ -96,9 +141,10 @@ export class CategoryService {
       });
 
       if (duplicate) {
-        const error = new Error(`Category with name "${input.name}" already exists`);
-        (error as any).code = "CONFLICT";
-        throw error;
+        throw new AppError(
+          "CONFLICT",
+          `Category with name "${input.name}" already exists`
+        );
       }
     }
 
@@ -113,7 +159,11 @@ export class CategoryService {
 
   /**
    * Deletes a category by ID.
-   * Business rule: A category CANNOT be deleted if it has associated products.
+   * Business rule: a category CANNOT be deleted if it has associated products.
+   *
+   * The count check is best-effort: if a product is created concurrently,
+   * PostgreSQL's RESTRICT foreign key rejects the delete and toErrorResponse()
+   * maps that Prisma error (P2003) to 409 instead of leaking a 500.
    */
   static async delete(id: number) {
     // 1. Verify category exists
@@ -125,11 +175,10 @@ export class CategoryService {
     });
 
     if (productCount > 0) {
-      const error = new Error(
+      throw new AppError(
+        "BAD_REQUEST",
         `Cannot delete category: it is currently linked to ${productCount} product(s). Reassign or delete the products first.`
       );
-      (error as any).code = "BAD_REQUEST";
-      throw error;
     }
 
     return prisma.category.delete({

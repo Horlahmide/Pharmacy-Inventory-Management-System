@@ -1,21 +1,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CategoryService } from "@/services/Category.service";
-import { createCategorySchema } from "@/lib/validation";
+import { createCategorySchema, paginatedQuerySchema } from "@/lib/validation";
+import { toErrorResponse } from "@/lib/errors";
 
 /**
  * GET /api/categories
- * Retrieves a list of all product categories.
+ * Retrieves a paginated list of product categories.
+ *
+ * Query params:
+ *   page   — 1-based page number (default 1)
+ *   limit  — rows per page, 1–100 (default 20)
+ *   search — optional case-insensitive partial match on category name
+ *
+ * Response: { data, pagination }
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const categories = await CategoryService.getAll();
-    return NextResponse.json(categories, { status: 200 });
-  } catch (error) {
-    console.error("Failed to fetch categories:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch categories" },
-      { status: 500 }
+    const query = paginatedQuerySchema.safeParse(
+      Object.fromEntries(request.nextUrl.searchParams)
     );
+
+    if (!query.success) {
+      return NextResponse.json(
+        {
+          error: "Validation error",
+          details: query.error.flatten().fieldErrors,
+        },
+        { status: 400 }
+      );
+    }
+
+    const result = await CategoryService.getAll(query.data);
+    return NextResponse.json(result, { status: 200 });
+  } catch (error) {
+    return toErrorResponse(error, "Failed to fetch categories");
   }
 }
 
@@ -43,16 +61,7 @@ export async function POST(request: NextRequest) {
     const category = await CategoryService.create(validation.data);
 
     return NextResponse.json(category, { status: 201 });
-  } catch (error: any) {
-    console.error("Failed to create category:", error);
-
-    if (error.code === "CONFLICT") {
-      return NextResponse.json({ error: error.message }, { status: 409 });
-    }
-
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+  } catch (error) {
+    return toErrorResponse(error, "Failed to create category");
   }
 }

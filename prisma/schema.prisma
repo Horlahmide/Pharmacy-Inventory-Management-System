@@ -25,9 +25,9 @@ model Category {
 
 model Manufacturer {
   id      Int     @id @default(autoincrement())
-  name    String
+  name    String  @unique
   phone   String?
-  email   String?
+  email   String? @unique
   address String?
 
   products Product[]
