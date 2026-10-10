@@ -24,7 +24,7 @@ export class ManufacturerService {
     const { page, limit, search } = query;
 
     const where: Prisma.ManufacturerWhereInput = search
-      ? { name: { contains: search, mode: "insensitive" } }
+      ? { nameLower: { contains: search.toLowerCase() } }
       : {};
 
     const [data, totalItems] = await prisma.$transaction([
@@ -81,13 +81,13 @@ export class ManufacturerService {
    * Creates a new manufacturer.
    *
    * Both the duplicate-name and duplicate-email pre-checks are friendly
-   * message optimizations. The database's @unique constraints on name and
-   * email are the real guarantee under concurrent requests — a race that
+   * message optimizations. The database's @unique constraints on nameLower
+   * and email are the real guarantee under concurrent requests — a race that
    * slips past these checks is caught by Prisma P2002 and mapped to 409
    * by toErrorResponse().
    *
-   * Email is stored lowercased so the case-sensitive Postgres unique index
-   * behaves as a case-insensitive one ("CEO@PFIZER.com" === "ceo@pfizer.com").
+   * nameLower and email are stored lowercased to guarantee case-insensitive
+   * uniqueness directly at the database level.
    */
   static async create(input: CreateManufacturerInput) {
     await this.assertNameAvailable(input.name);
@@ -96,6 +96,7 @@ export class ManufacturerService {
     return prisma.manufacturer.create({
       data: {
         name: input.name,
+        nameLower: input.name.toLowerCase(),
         phone: input.phone ?? null,
         email: input.email?.toLowerCase() ?? null,
         address: input.address ?? null,
@@ -121,7 +122,10 @@ export class ManufacturerService {
     return prisma.manufacturer.update({
       where: { id },
       data: {
-        ...(input.name !== undefined && { name: input.name }),
+        ...(input.name !== undefined && {
+          name: input.name,
+          nameLower: input.name.toLowerCase(),
+        }),
         ...(input.phone !== undefined && { phone: input.phone }),
         ...(input.email !== undefined && { email: input.email?.toLowerCase() ?? null }),
         ...(input.address !== undefined && { address: input.address }),
@@ -137,7 +141,7 @@ export class ManufacturerService {
     // 1. Verify manufacturer exists
     await this.getById(id);
 
-    // 2. Check for associated products
+    // 2. Check for associated products (benefiting from @@index([manufacturerId]))
     const productCount = await prisma.product.count({
       where: { manufacturerId: id },
     });
@@ -156,12 +160,12 @@ export class ManufacturerService {
 
   /**
    * Throws CONFLICT if another manufacturer already uses the given name
-   * (case-insensitive). excludeId excludes the row being updated.
+   * (case-insensitive via nameLower). excludeId excludes the row being updated.
    */
   private static async assertNameAvailable(name: string, excludeId?: number) {
     const existing = await prisma.manufacturer.findFirst({
       where: {
-        name: { equals: name, mode: "insensitive" },
+        nameLower: name.toLowerCase(),
         ...(excludeId !== undefined && { NOT: { id: excludeId } }),
       },
     });
@@ -183,7 +187,7 @@ export class ManufacturerService {
 
     const existing = await prisma.manufacturer.findFirst({
       where: {
-        email: { equals: email, mode: "insensitive" },
+        email: { equals: email.toLowerCase(), mode: "insensitive" },
         ...(excludeId !== undefined && { NOT: { id: excludeId } }),
       },
     });

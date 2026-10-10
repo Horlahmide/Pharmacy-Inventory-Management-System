@@ -6,12 +6,13 @@ import { idParamSchema } from "@/lib/validation";
  * Business error codes used by the service layer.
  * Route handlers translate these into HTTP status codes.
  */
-export type AppErrorCode = "NOT_FOUND" | "CONFLICT" | "BAD_REQUEST";
+export type AppErrorCode = "NOT_FOUND" | "CONFLICT" | "BAD_REQUEST" | "PAYLOAD_TOO_LARGE";
 
 const APP_ERROR_STATUS: Record<AppErrorCode, number> = {
   NOT_FOUND: 404,
   CONFLICT: 409,
   BAD_REQUEST: 400,
+  PAYLOAD_TOO_LARGE: 413,
 };
 
 /**
@@ -107,3 +108,28 @@ export async function parseIdParam(
   }
   return { success: true, id: result.data.id };
 }
+
+/**
+ * Reads and parses the JSON body of a request with a maximum byte size cap.
+ * Protects against Denial-of-Service attacks from unbounded payloads.
+ *
+ * - Exceeds maxBytes -> throws AppError("PAYLOAD_TOO_LARGE") which maps to 413.
+ * - Malformed JSON  -> throws SyntaxError which toErrorResponse() maps to 400.
+ */
+export async function readJsonBody(
+  request: Request,
+  maxBytes: number = 16 * 1024
+): Promise<unknown> {
+  const text = await request.text();
+  const byteLength = new TextEncoder().encode(text).length;
+
+  if (byteLength > maxBytes) {
+    throw new AppError(
+      "PAYLOAD_TOO_LARGE",
+      `Request body exceeds maximum allowed size of ${maxBytes} bytes`
+    );
+  }
+
+  return JSON.parse(text);
+}
+

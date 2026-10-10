@@ -1,24 +1,33 @@
 import { z } from "zod";
 
+// Reusable regex to reject non-printable ASCII control characters (\x00-\x1F, \x7F)
+const noControlCharsRegex = /^[^\x00-\x1F\x7F]+$/;
+// Allows normal newlines (\r\n) for multiline text (description, address) but rejects other control characters
+const multilineCharsRegex = /^[^\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+$/;
+
 /**
  * Validation schema for creating a new Category.
  * Request body: { name, description? }
  */
-export const createCategorySchema = z.object({
-  name: z
-    .string({
-      error: "Category name must be a string",
-    })
-    .trim()
-    .min(1, "Category name is required")
-    .max(100, "Category name cannot exceed 100 characters"),
-  description: z
-    .string()
-    .trim()
-    .max(500, "Description cannot exceed 500 characters")
-    .optional()
-    .nullable(),
-});
+export const createCategorySchema = z
+  .object({
+    name: z
+      .string({
+        error: "Category name must be a string",
+      })
+      .trim()
+      .min(1, "Category name is required")
+      .max(100, "Category name cannot exceed 100 characters")
+      .regex(noControlCharsRegex, "Category name contains invalid control characters"),
+    description: z
+      .string()
+      .trim()
+      .max(500, "Description cannot exceed 500 characters")
+      .regex(multilineCharsRegex, "Description contains invalid control characters")
+      .optional()
+      .nullable(),
+  })
+  .strict();
 
 /**
  * Validation schema for updating an existing Category.
@@ -31,14 +40,17 @@ export const updateCategorySchema = z
       .trim()
       .min(1, "Category name cannot be empty")
       .max(100, "Category name cannot exceed 100 characters")
+      .regex(noControlCharsRegex, "Category name contains invalid control characters")
       .optional(),
     description: z
       .string()
       .trim()
       .max(500, "Description cannot exceed 500 characters")
+      .regex(multilineCharsRegex, "Description contains invalid control characters")
       .optional()
       .nullable(),
   })
+  .strict()
   .refine(
     (data) => data.name !== undefined || data.description !== undefined,
     {
@@ -103,36 +115,44 @@ export const paginatedQuerySchema = z.object({
  * case-sensitive, and lowercasing closes the gap where "CEO@PFIZER.com" and
  * "ceo@pfizer.com" could otherwise dodge the constraint.
  */
-export const createManufacturerSchema = z.object({
-  name: z
-    .string({
-      error: "Manufacturer name must be a string",
-    })
-    .trim()
-    .min(1, "Manufacturer name is required")
-    .max(100, "Manufacturer name cannot exceed 100 characters"),
-  phone: z
-    .string()
-    .trim()
-    .max(30, "Phone number cannot exceed 30 characters")
-    .optional()
-    .nullable(),
-  email: z
-    .email({ error: "Invalid email address" })
-    .max(254, "Email cannot exceed 254 characters")
-    .optional()
-    .nullable(),
-  address: z
-    .string()
-    .trim()
-    .max(500, "Address cannot exceed 500 characters")
-    .optional()
-    .nullable(),
-});
+export const createManufacturerSchema = z
+  .object({
+    name: z
+      .string({
+        error: "Manufacturer name must be a string",
+      })
+      .trim()
+      .min(1, "Manufacturer name is required")
+      .max(100, "Manufacturer name cannot exceed 100 characters")
+      .regex(noControlCharsRegex, "Manufacturer name contains invalid control characters"),
+    phone: z
+      .string()
+      .trim()
+      .max(30, "Phone number cannot exceed 30 characters")
+      .regex(noControlCharsRegex, "Phone number contains invalid control characters")
+      .optional()
+      .nullable(),
+    email: z
+      .string()
+      .trim()
+      .max(254, "Email cannot exceed 254 characters")
+      .pipe(z.email({ error: "Invalid email address" }))
+      .optional()
+      .nullable(),
+    address: z
+      .string()
+      .trim()
+      .max(500, "Address cannot exceed 500 characters")
+      .regex(multilineCharsRegex, "Address contains invalid control characters")
+      .optional()
+      .nullable(),
+  })
+  .strict();
 
 /**
  * Validation schema for updating an existing Manufacturer.
  * All fields optional; at least one must be provided.
+ * Enforces strict keys (rejects unknown properties).
  */
 export const updateManufacturerSchema = z
   .object({
@@ -141,25 +161,31 @@ export const updateManufacturerSchema = z
       .trim()
       .min(1, "Manufacturer name cannot be empty")
       .max(100, "Manufacturer name cannot exceed 100 characters")
+      .regex(noControlCharsRegex, "Manufacturer name contains invalid control characters")
       .optional(),
     phone: z
       .string()
       .trim()
       .max(30, "Phone number cannot exceed 30 characters")
+      .regex(noControlCharsRegex, "Phone number contains invalid control characters")
       .optional()
       .nullable(),
     email: z
-      .email({ error: "Invalid email address" })
+      .string()
+      .trim()
       .max(254, "Email cannot exceed 254 characters")
+      .pipe(z.email({ error: "Invalid email address" }))
       .optional()
       .nullable(),
     address: z
       .string()
       .trim()
       .max(500, "Address cannot exceed 500 characters")
+      .regex(multilineCharsRegex, "Address contains invalid control characters")
       .optional()
       .nullable(),
   })
+  .strict()
   .refine(
     (data) =>
       data.name !== undefined ||

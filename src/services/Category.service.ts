@@ -30,7 +30,7 @@ export class CategoryService {
     // Typed explicitly: without it TypeScript widens `mode` to string
     // and the query no longer type-checks against Prisma.CategoryWhereInput.
     const where: Prisma.CategoryWhereInput = search
-      ? { name: { contains: search, mode: "insensitive" } }
+      ? { nameLower: { contains: search.toLowerCase() } }
       : {};
 
     const [data, totalItems] = await prisma.$transaction([
@@ -88,18 +88,14 @@ export class CategoryService {
    * Creates a new category.
    * Checks for duplicate category names (case-insensitive) before creation.
    *
-   * This pre-check is only a friendly-message optimization: it loses the
-   * race if two identical names arrive concurrently. The database's unique
-   * constraint on `name` is the real guarantee — if it rejects the insert
-   * (Prisma P2002), toErrorResponse() maps that to 409.
+   * Both the duplicate-name pre-check and the database's @unique constraint
+   * on `nameLower` guarantee that identical names (regardless of casing)
+   * cannot be created, even under high concurrency.
    */
   static async create(input: CreateCategoryInput) {
     const existing = await prisma.category.findFirst({
       where: {
-        name: {
-          equals: input.name,
-          mode: "insensitive",
-        },
+        nameLower: input.name.toLowerCase(),
       },
     });
 
@@ -113,6 +109,7 @@ export class CategoryService {
     return prisma.category.create({
       data: {
         name: input.name,
+        nameLower: input.name.toLowerCase(),
         description: input.description ?? null,
       },
     });
@@ -127,13 +124,10 @@ export class CategoryService {
     await this.getById(id);
 
     // 2. If name is being changed, check if new name is already taken by another category
-    if (input.name) {
+    if (input.name !== undefined) {
       const duplicate = await prisma.category.findFirst({
         where: {
-          name: {
-            equals: input.name,
-            mode: "insensitive",
-          },
+          nameLower: input.name.toLowerCase(),
           NOT: {
             id,
           },
@@ -151,7 +145,10 @@ export class CategoryService {
     return prisma.category.update({
       where: { id },
       data: {
-        ...(input.name !== undefined && { name: input.name }),
+        ...(input.name !== undefined && {
+          name: input.name,
+          nameLower: input.name.toLowerCase(),
+        }),
         ...(input.description !== undefined && { description: input.description }),
       },
     });

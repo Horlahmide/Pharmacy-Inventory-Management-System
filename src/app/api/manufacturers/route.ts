@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ManufacturerService } from "@/services/Manufacturer.service";
 import { createManufacturerSchema, paginatedQuerySchema } from "@/lib/validation";
-import { toErrorResponse } from "@/lib/errors";
+import { toErrorResponse, readJsonBody } from "@/lib/errors";
 
 /**
  * GET /api/manufacturers
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
+    const body = await readJsonBody(request);
 
     // 1. Zod validation
     const validation = createManufacturerSchema.safeParse(body);

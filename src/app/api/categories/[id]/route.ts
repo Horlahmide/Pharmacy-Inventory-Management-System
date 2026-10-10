@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CategoryService } from "@/services/Category.service";
 import { updateCategorySchema } from "@/lib/validation";
-import { toErrorResponse, parseIdParam } from "@/lib/errors";
+import { toErrorResponse, parseIdParam, readJsonBody } from "@/lib/errors";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const parsed = await parseIdParam(context.params, "category");
     if (!parsed.success) return parsed.response;
 
-    const body = await request.json();
+    const body = await readJsonBody(request);
     const validation = updateCategorySchema.safeParse(body);
     if (!validation.success) {
       return NextResponse.json(
