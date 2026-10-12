@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CategoryService } from "@/services/Category.service";
 import { updateCategorySchema } from "@/lib/validation";
-import { toErrorResponse, parseIdParam, readJsonBody } from "@/lib/errors";
+import { toErrorResponse, parseIdParam, readJsonBody, validationErrorDetails, methodNotAllowedResponse } from "@/lib/errors";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -38,7 +38,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       return NextResponse.json(
         {
           error: "Validation error",
-          details: validation.error.flatten().fieldErrors,
+          details: validationErrorDetails(validation.error),
         },
         { status: 400 }
       );
@@ -68,4 +68,14 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
   } catch (error) {
     return toErrorResponse(error, "Failed to delete category");
   }
+}
+
+/** POST creates resources on the collection route, not on an existing :id. */
+export function POST() {
+  return methodNotAllowedResponse(["GET", "PUT", "DELETE"]);
+}
+
+/** PATCH is not implemented; use PUT for full updates. */
+export function PATCH() {
+  return methodNotAllowedResponse(["GET", "PUT", "DELETE"]);
 }

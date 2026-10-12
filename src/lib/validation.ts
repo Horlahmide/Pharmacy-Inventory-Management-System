@@ -203,3 +203,91 @@ export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
 export type PaginatedQueryInput = z.infer<typeof paginatedQuerySchema>;
 export type CreateManufacturerInput = z.infer<typeof createManufacturerSchema>;
 export type UpdateManufacturerInput = z.infer<typeof updateManufacturerSchema>;
+
+/**
+ * Validation schema for creating a new Supplier.
+ * Request body: { name, phone?, email?, address? }
+ */
+export const createSupplierSchema = z
+  .object({
+    name: z
+      .string({
+        error: "Supplier name must be a string",
+      })
+      .trim()
+      .min(1, "Supplier name is required")
+      .max(100, "Supplier name cannot exceed 100 characters")
+      .regex(noControlCharsRegex, "Supplier name contains invalid control characters"),
+    phone: z
+      .string()
+      .trim()
+      .max(30, "Phone number cannot exceed 30 characters")
+      .regex(noControlCharsRegex, "Phone number contains invalid control characters")
+      .optional()
+      .nullable(),
+    email: z
+      .string()
+      .trim()
+      .max(254, "Email cannot exceed 254 characters")
+      .pipe(z.email({ error: "Invalid email address" }))
+      .optional()
+      .nullable(),
+    address: z
+      .string()
+      .trim()
+      .max(500, "Address cannot exceed 500 characters")
+      .regex(multilineCharsRegex, "Address contains invalid control characters")
+      .optional()
+      .nullable(),
+  })
+  .strict();
+
+/**
+ * Validation schema for updating an existing Supplier.
+ * All fields optional; at least one must be provided.
+ */
+export const updateSupplierSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Supplier name cannot be empty")
+      .max(100, "Supplier name cannot exceed 100 characters")
+      .regex(noControlCharsRegex, "Supplier name contains invalid control characters")
+      .optional(),
+    phone: z
+      .string()
+      .trim()
+      .max(30, "Phone number cannot exceed 30 characters")
+      .regex(noControlCharsRegex, "Phone number contains invalid control characters")
+      .optional()
+      .nullable(),
+    email: z
+      .string()
+      .trim()
+      .max(254, "Email cannot exceed 254 characters")
+      .pipe(z.email({ error: "Invalid email address" }))
+      .optional()
+      .nullable(),
+    address: z
+      .string()
+      .trim()
+      .max(500, "Address cannot exceed 500 characters")
+      .regex(multilineCharsRegex, "Address contains invalid control characters")
+      .optional()
+      .nullable(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      data.name !== undefined ||
+      data.phone !== undefined ||
+      data.email !== undefined ||
+      data.address !== undefined,
+    {
+      message: "At least one field (name, phone, email or address) must be provided for update",
+    }
+  );
+
+export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
+export type UpdateSupplierInput = z.infer<typeof updateSupplierSchema>;

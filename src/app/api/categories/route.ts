@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { CategoryService } from "@/services/Category.service";
 import { createCategorySchema, paginatedQuerySchema } from "@/lib/validation";
-import { toErrorResponse, readJsonBody } from "@/lib/errors";
+import { toErrorResponse, readJsonBody, validationErrorDetails, methodNotAllowedResponse } from "@/lib/errors";
 
 /**
  * GET /api/categories
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           error: "Validation error",
-          details: query.error.flatten().fieldErrors,
+          details: validationErrorDetails(query.error),
         },
         { status: 400 }
       );
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           error: "Validation error",
-          details: validation.error.flatten().fieldErrors,
+          details: validationErrorDetails(validation.error),
         },
         { status: 400 }
       );
@@ -64,4 +64,19 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return toErrorResponse(error, "Failed to create category");
   }
+}
+
+/** PUT is not implemented on the collection route. */
+export function PUT() {
+  return methodNotAllowedResponse(["GET", "POST"]);
+}
+
+/** PATCH is not implemented on the collection route. */
+export function PATCH() {
+  return methodNotAllowedResponse(["GET", "POST"]);
+}
+
+/** DELETE requires a specific :id; deleting the whole collection is not allowed. */
+export function DELETE() {
+  return methodNotAllowedResponse(["GET", "POST"]);
 }

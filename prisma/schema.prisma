@@ -62,11 +62,12 @@ model Product {
 }
 
 model Supplier {
-  id      Int     @id @default(autoincrement())
-  name    String
-  phone   String?
-  email   String?
-  address String?
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  nameLower String   @unique
+  phone     String?
+  email     String?  @unique
+  address   String?
 
   batches Batch[]
 
@@ -91,6 +92,7 @@ model Batch {
   createdAt DateTime @default(now())
 
   @@unique([productId, batchNumber])
+  @@index([supplierId])
 }
 
 model InventoryMovement {

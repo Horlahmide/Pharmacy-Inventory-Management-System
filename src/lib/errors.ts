@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { ZodError } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { idParamSchema } from "@/lib/validation";
 
@@ -100,7 +101,7 @@ export async function parseIdParam(
       response: NextResponse.json(
         {
           error: `Invalid ${label} ID`,
-          details: result.error.flatten().fieldErrors,
+          details: validationErrorDetails(result.error),
         },
         { status: 400 }
       ),
@@ -131,5 +132,39 @@ export async function readJsonBody(
   }
 
   return JSON.parse(text);
+}
+
+/**
+ * Builds the `details` payload for a 400 Zod validation response.
+ *
+ * zod's .strict() reports unknown keys as *form-level* errors (empty path,
+ * surfaced under flatten().formErrors), NOT field errors. Sending only
+ * fieldErrors therefore produced a useless `details: {}` for unknown keys.
+ * This helper forwards field errors under their field names and form-level
+ * errors under `_errors`, so the frontend always gets a reason.
+ */
+export function validationErrorDetails<T>(error: ZodError<T>): Record<string, unknown> {
+  const flat = error.flatten();
+  const details: Record<string, unknown> = { ...flat.fieldErrors };
+  if (flat.formErrors.length > 0) {
+    details._errors = flat.formErrors;
+  }
+  return details;
+}
+
+/**
+ * 405 for a route that does not implement a given HTTP method.
+ *
+ * Next's App Router returns an empty-bodied 405 on its own when a method is
+ * not exported, which is indistinguishable from "no response" to clients.
+ * Explicit handlers let us send a JSON body plus the standard `Allow` header
+ * so the route contract is self-describing.
+ */
+export function methodNotAllowedResponse(allowed: readonly string[]): NextResponse {
+  const allow = allowed.join(", ");
+  return NextResponse.json(
+    { error: `Method not allowed. Allowed methods: ${allow}` },
+    { status: 405, headers: { Allow: allow } }
+  );
 }
 
