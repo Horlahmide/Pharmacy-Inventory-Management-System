@@ -41,7 +41,8 @@ model Manufacturer {
 model Product {
   id           Int     @id @default(autoincrement())
   name         String
-  strength     String?
+  nameLower    String
+  strength     String  @default("")
   description  String?
   sellingPrice Decimal @db.Decimal(10, 2)
   barcode      String? @unique
@@ -57,6 +58,8 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([nameLower, strength, manufacturerId])
+  @@index([nameLower])
   @@index([manufacturerId])
   @@index([categoryId])
 }

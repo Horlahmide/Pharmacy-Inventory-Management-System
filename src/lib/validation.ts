@@ -291,3 +291,171 @@ export const updateSupplierSchema = z
 
 export type CreateSupplierInput = z.infer<typeof createSupplierSchema>;
 export type UpdateSupplierInput = z.infer<typeof updateSupplierSchema>;
+
+/**
+ * Validation schema for creating a new Product.
+ * Request body: { name, strength?, description?, sellingPrice, barcode?, categoryId, manufacturerId }
+ *
+ * sellingPrice is a STRING (not number) to avoid IEEE 754 floating-point
+ * corruption; it is passed straight to Prisma's Decimal. The regex caps it
+ * at DECIMAL(10,2) bounds (max 8 integer digits, max 2 decimals) so overflow
+ * never reaches PostgreSQL as a 500.
+ *
+ * strength defaults to "" (empty string) so the composite unique index
+ * (nameLower, strength, manufacturerId) treats missing strengths as equal —
+ * PostgreSQL unique indexes treat NULL != NULL, which would let duplicates
+ * through. The service layer also normalizes explicit null to "".
+ */
+export const createProductSchema = z
+  .object({
+    name: z
+      .string({
+        error: "Product name must be a string",
+      })
+      .trim()
+      .min(1, "Product name is required")
+      .max(200, "Product name cannot exceed 200 characters")
+      .regex(noControlCharsRegex, "Product name contains invalid control characters"),
+    strength: z
+      .string()
+      .trim()
+      .max(50, "Strength cannot exceed 50 characters")
+      .refine((v) => v === "" || noControlCharsRegex.test(v), "Strength contains invalid control characters")
+      .optional()
+      .nullable(),
+    description: z
+      .string()
+      .trim()
+      .max(1000, "Description cannot exceed 1000 characters")
+      .regex(multilineCharsRegex, "Description contains invalid control characters")
+      .optional()
+      .nullable(),
+    sellingPrice: z
+      .string({
+        error: "Selling price must be a string (e.g. \"29.99\")",
+      })
+      .trim()
+      .regex(/^\d{1,8}(\.\d{1,2})?$/, "Selling price must be a valid amount (max 8 digits, up to 2 decimals)")
+      .refine((v) => Number(v) > 0, "Selling price must be greater than 0"),
+    barcode: z
+      .string()
+      .trim()
+      .max(50, "Barcode cannot exceed 50 characters")
+      .refine((v) => v === "" || noControlCharsRegex.test(v), "Barcode contains invalid control characters")
+      .optional()
+      .nullable(),
+    categoryId: z
+      .number({
+        error: "Category ID must be a valid number",
+      })
+      .int("Category ID must be an integer")
+      .positive("Category ID must be a positive integer"),
+    manufacturerId: z
+      .number({
+        error: "Manufacturer ID must be a valid number",
+      })
+      .int("Manufacturer ID must be an integer")
+      .positive("Manufacturer ID must be a positive integer"),
+  })
+  .strict();
+
+/**
+ * Validation schema for updating an existing Product.
+ * All fields optional; at least one must be provided.
+ *
+ * strength/barcode/description accept null: strength null clears to "",
+ * barcode null clears the barcode, description null clears the description.
+ * Uniqueness on update requires merging these partial values with the
+ * current row (handled in ProductService).
+ */
+export const updateProductSchema = z
+  .object({
+    name: z
+      .string()
+      .trim()
+      .min(1, "Product name cannot be empty")
+      .max(200, "Product name cannot exceed 200 characters")
+      .regex(noControlCharsRegex, "Product name contains invalid control characters")
+      .optional(),
+    strength: z
+      .string()
+      .trim()
+      .max(50, "Strength cannot exceed 50 characters")
+      .refine((v) => v === "" || noControlCharsRegex.test(v), "Strength contains invalid control characters")
+      .optional()
+      .nullable(),
+    description: z
+      .string()
+      .trim()
+      .max(1000, "Description cannot exceed 1000 characters")
+      .regex(multilineCharsRegex, "Description contains invalid control characters")
+      .optional()
+      .nullable(),
+    sellingPrice: z
+      .string()
+      .trim()
+      .regex(/^\d{1,8}(\.\d{1,2})?$/, "Selling price must be a valid amount (max 8 digits, up to 2 decimals)")
+      .refine((v) => Number(v) > 0, "Selling price must be greater than 0")
+      .optional(),
+    barcode: z
+      .string()
+      .trim()
+      .max(50, "Barcode cannot exceed 50 characters")
+      .refine((v) => v === "" || noControlCharsRegex.test(v), "Barcode contains invalid control characters")
+      .optional()
+      .nullable(),
+    categoryId: z
+      .number({
+        error: "Category ID must be a valid number",
+      })
+      .int("Category ID must be an integer")
+      .positive("Category ID must be a positive integer")
+      .optional(),
+    manufacturerId: z
+      .number({
+        error: "Manufacturer ID must be a valid number",
+      })
+      .int("Manufacturer ID must be an integer")
+      .positive("Manufacturer ID must be a positive integer")
+      .optional(),
+  })
+  .strict()
+  .refine(
+    (data) =>
+      data.name !== undefined ||
+      data.strength !== undefined ||
+      data.description !== undefined ||
+      data.sellingPrice !== undefined ||
+      data.barcode !== undefined ||
+      data.categoryId !== undefined ||
+      data.manufacturerId !== undefined,
+    {
+      message:
+        "At least one field (name, strength, description, sellingPrice, barcode, categoryId or manufacturerId) must be provided for update",
+    }
+  );
+
+/**
+ * Query schema for GET /api/products.
+ * Extends the shared pagination/search schema with FK filters.
+ */
+export const productQuerySchema = paginatedQuerySchema.extend({
+  categoryId: z.coerce
+    .number({
+      error: "Category ID must be a valid number",
+    })
+    .int("Category ID must be an integer")
+    .positive("Category ID must be a positive integer")
+    .optional(),
+  manufacturerId: z.coerce
+    .number({
+      error: "Manufacturer ID must be a valid number",
+    })
+    .int("Manufacturer ID must be an integer")
+    .positive("Manufacturer ID must be a positive integer")
+    .optional(),
+});
+
+export type CreateProductInput = z.infer<typeof createProductSchema>;
+export type UpdateProductInput = z.infer<typeof updateProductSchema>;
+export type ProductQueryInput = z.infer<typeof productQuerySchema>;
